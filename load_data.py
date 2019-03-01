@@ -15,6 +15,6 @@ train_images = pd.read_pickle('./input/train_images.pkl')
 train_labels = pd.read_csv('./input/train_labels.csv')
 
 img_idx = 16
-
 plt.title('Label: {}'.format(train_labels.iloc[img_idx]['Category']))
 plt.imshow(train_images[img_idx])
+plt.show()
