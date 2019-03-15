@@ -39,8 +39,10 @@ params = {'dataroot':'/input/',
 class PickleDataset(Dataset):
     def __init__(self, pkl_file, label_file, transform=None):
         self.images = pd.read_pickle(pkl_file)
-        self.labels = pd.read_csv(label_file)
-        self.transform = transform
+        if label_file != '':
+            self.labels = pd.read_csv(label_file)
+        else:
+            self.transform = transform
 
     def __len__(self):
         return len(self.images)
