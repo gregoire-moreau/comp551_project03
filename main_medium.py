@@ -21,7 +21,6 @@ for i in range(40000):
     res = cv2.resize(train_images[i], dsize=(28,28), interpolation=cv2.INTER_CUBIC)
     data[i] = np.reshape(res, (784,))
 
-mnist = tf.contrib.learn.datasets.load_dataset("mnist")
 train_data = data[:32000]
 print(train_data.shape)
 train_labels = np.asarray(train_classes.iloc[:32000, 1], dtype=np.int32)
@@ -119,6 +118,7 @@ train_input_fn = tf.estimator.inputs.numpy_input_fn(x={"x": train_data},
                                                     batch_size=200,
                                                     num_epochs=50,
                                                     shuffle=True)
+
 mnist_classifier.train(input_fn=train_input_fn,
                        steps=None,
                        hooks=None)

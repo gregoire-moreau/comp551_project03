@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import transforms
 import numpy as np
+import cv2
+import matplotlib.pyplot as plt
 from PIL import Image
 from torchvision.datasets import ImageFolder
 from torch.utils.data import Dataset, Subset
@@ -13,21 +15,21 @@ from torch.utils.data import Dataset, Subset
 # adapted from https://github.com/floydhub/mnist
 # also used https://pytorch.org/tutorials/beginner/data_loading_tutorial.html
 # https://pytorch.org/docs/stable/torchvision/transforms.html
-
+# https://www.kaggle.com/sdelecourt/cnn-with-pytorch-for-mnist
 # train_images = pd.read_pickle('input/train_images.pkl')
 #train_labels = pd.read_csv('input/train_labels.csv')
 
 params = {'dataroot':'/input/',
-          'learning_rate':0.01,
+          'learning_rate':0.001,
           'evalf' : '',
           'outf':'models',
           'ckpf':'',
-          'batch_size':20,
+          'batch_size':100,
           'test_batch_size':1000,
-          'epochs':10,
+          'epochs':100,
           'momentum':0.5,
           'seed':42,
-          'log-interval':10,
+          'log_interval':100,
           'train':True,
           'train2':True,
           'evaluate': False,
@@ -35,15 +37,23 @@ params = {'dataroot':'/input/',
 
 class PickleDataset(Dataset):
     def __init__(self, pkl_file, label_file, transform=None):
-        self.images = pd.read_pickle(pkl_file)
+        images = pd.read_pickle(pkl_file)
         self.labels = pd.read_csv(label_file)
+        self.data = np.zeros((len(images), 64,64), dtype=np.float32)
+        for i in range(len(images)):
+            res = cv2.resize(images[i], dsize=(64, 64), interpolation=cv2.INTER_CUBIC)
+            self.data[i] = np.reshape(res, (64, 64))
         self.transform = transform
+        img_idx = 400
+        plt.title('Label: {}'.format(self.labels.iloc[img_idx]['Category']))
+        plt.imshow(self.data[img_idx])
+        plt.show()
 
     def __len__(self):
-        return len(self.images)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        data = self.images[idx]
+        data = self.data[idx]
         target = self.labels.iloc[idx]['Category']
 
         if self.transform:
@@ -54,21 +64,24 @@ class PickleDataset(Dataset):
 
 
 class Net(nn.Module):
-    """ConvNet -> Max_Pool -> RELU -> ConvNet -> Max_Pool -> RELU -> FC -> RELU -> FC -> SOFTMAX"""
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 20, 8, 1)
-        self.conv2 = nn.Conv2d(20, 50, 8, 1)
-        self.fc1 = nn.Linear(4*4*50, 500)
-        self.fc2 = nn.Linear(500, 10)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
+        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
+        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
+        self.fc1 = nn.Linear(12 * 12* 64, 256)
+        self.fc2 = nn.Linear(256, 10)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, 2, 2)
-        x = F.relu(self.conv2(x))
-        x = F.max_pool2d(x, 2, 2)
-        x = x.view(-1, 4*4*50)
+        #x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = F.relu(F.max_pool2d(self.conv3(x),2))
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = x.view(-1,12*12*64 )
         x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
@@ -153,6 +166,7 @@ def test_image():
 
 if __name__ == '__main__':
     use_cuda = torch.cuda.is_available()
+    print("use cuda ", use_cuda)
     device = torch.device("cuda" if use_cuda else "cpu")
     try:
         os.makedirs(params["outf"])
