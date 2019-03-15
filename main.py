@@ -42,7 +42,9 @@ class PickleDataset(Dataset):
         if label_file != '':
             self.labels = pd.read_csv(label_file)
         else:
-            self.transform = transform
+            self.labels = None
+
+        self.transform = transform
 
     def __len__(self):
         return len(self.images)
