@@ -10,6 +10,7 @@ import cv2
 import matplotlib.pyplot as plt
 from PIL import Image
 from torchvision.datasets import ImageFolder
+from bounding_boxes import biggest_box
 from torch.utils.data import Dataset, Subset
 
 # adapted from https://github.com/floydhub/mnist
@@ -20,16 +21,16 @@ from torch.utils.data import Dataset, Subset
 #train_labels = pd.read_csv('input/train_labels.csv')
 
 params = {'dataroot':'/input/',
-          'learning_rate':0.001,
+          'learning_rate':0.01,
           'evalf' : '',
           'outf':'models',
           'ckpf':'',
-          'batch_size':100,
+          'batch_size':64,
           'test_batch_size':1000,
           'epochs':100,
           'momentum':0.5,
           'seed':42,
-          'log_interval':100,
+          'log_interval':10,
           'train':True,
           'train2':True,
           'evaluate': False,
@@ -37,23 +38,15 @@ params = {'dataroot':'/input/',
 
 class PickleDataset(Dataset):
     def __init__(self, pkl_file, label_file, transform=None):
-        images = pd.read_pickle(pkl_file)
+        self.images = pd.read_pickle(pkl_file)
         self.labels = pd.read_csv(label_file)
-        self.data = np.zeros((len(images), 64,64), dtype=np.float32)
-        for i in range(len(images)):
-            res = cv2.resize(images[i], dsize=(64, 64), interpolation=cv2.INTER_CUBIC)
-            self.data[i] = np.reshape(res, (64, 64))
         self.transform = transform
-        img_idx = 400
-        plt.title('Label: {}'.format(self.labels.iloc[img_idx]['Category']))
-        plt.imshow(self.data[img_idx])
-        plt.show()
 
     def __len__(self):
-        return len(self.data)
+        return len(self.images)
 
     def __getitem__(self, idx):
-        data = self.data[idx]
+        data = transform_image(self.images[idx])
         target = self.labels.iloc[idx]['Category']
 
         if self.transform:
@@ -61,27 +54,26 @@ class PickleDataset(Dataset):
 
         return (data, target)
 
-
+def transform_image(image):
+    digit = biggest_box(image)
+    return np.reshape(digit , (1,28,28))
 
 class Net(nn.Module):
+    """ConvNet -> Max_Pool -> RELU -> ConvNet -> Max_Pool -> RELU -> FC -> RELU -> FC -> SOFTMAX"""
     def __init__(self):
         super(Net, self).__init__()
-        self.conv1 = nn.Conv2d(1, 32, kernel_size=5)
-        self.conv2 = nn.Conv2d(32, 32, kernel_size=5)
-        self.conv3 = nn.Conv2d(32,64, kernel_size=5)
-        self.fc1 = nn.Linear(12 * 12* 64, 256)
-        self.fc2 = nn.Linear(256, 10)
+        self.conv1 = nn.Conv2d(1, 20, 5, 1)
+        self.conv2 = nn.Conv2d(20, 50, 5, 1)
+        self.fc1 = nn.Linear(4*4*50, 500)
+        self.fc2 = nn.Linear(500, 10)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        #x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu(F.max_pool2d(self.conv2(x), 2))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = F.relu(F.max_pool2d(self.conv3(x),2))
-        x = F.dropout(x, p=0.5, training=self.training)
-        x = x.view(-1,12*12*64 )
+        x = F.max_pool2d(x, 2, 2)
+        x = F.relu(self.conv2(x))
+        x = F.max_pool2d(x, 2, 2)
+        x = x.view(-1, 4*4*50)
         x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
@@ -91,7 +83,7 @@ def train(model, device, train_loader, optimizer, epoch):
     """Training"""
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
+        data, target = data.to(device, dtype=torch.float), target.to(device)
         optimizer.zero_grad()
         output = model(data)
         loss = F.nll_loss(output, target)
@@ -111,7 +103,7 @@ def test(model, device, test_loader, epoch):
     correct = 0
     with torch.no_grad():
         for data, target in test_loader:
-            data, target = data.to(device), target.to(device)
+            data, target = data.to(device, dtype=torch.float), target.to(device)
             output = model(data)
             test_loss += F.nll_loss(output, target, reduction='sum').item() # sum up batch loss
             pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
@@ -179,7 +171,7 @@ if __name__ == '__main__':
 
     if params["train2"]:
         dataset = PickleDataset('input/train_images.pkl', 'input/train_labels.csv', transform=transforms.Compose([
-                           transforms.ToTensor(),
+                           # transforms.ToTensor(),
                            #transforms.Normalize((0.1307,), (0.3081,))
                        ]))
         train_loader = torch.utils.data.DataLoader(

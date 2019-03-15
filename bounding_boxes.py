@@ -1,4 +1,6 @@
 import numpy as np
+import cv2
+from math import floor, ceil
 
 def biggest_box(img):
     contours = find_contours(img)
@@ -8,11 +10,16 @@ def biggest_box(img):
         if size > max_size:
             max_size = size
             biggest = x
-    to_ret = np.zeros((biggest[2] - biggest[0] + 1, biggest[3] - biggest[1] + 1))
+    to_ret = np.zeros((biggest[2] - biggest[0] + 1, biggest[3] - biggest[1] + 1), dtype=np.float)
     for i in range(biggest[2] - biggest[0] + 1):
         for j in range(biggest[3] - biggest[1] + 1):
-            to_ret[i][j] = img[biggest[0] + i][biggest[1] + j]
-
+            to_ret[i][j] = 1 if img[biggest[0] + i][biggest[1] + j] == 255 else 0
+    h = len(to_ret)
+    w = len(to_ret[0])
+    if h <= 28 and w <= 28:
+        to_ret = cv2.copyMakeBorder(to_ret,floor((28-h)/2),ceil((28-h)/2),floor((28-h)/2),ceil((28-w)/2),cv2.BORDER_CONSTANT,value=0)
+    else :
+        to_ret = cv2.resize(to_ret, (28, 28))
     return to_ret
 
 
@@ -32,13 +39,12 @@ def find_contours(img):
     return results
 
 def exploit(tab):
-    (i, j) = tab[1]
+    (i, j) = tab[0]
     min_x = i
     min_y = j
     max_x = i
     max_y = j
-    queue = []
-    queue_add(queue, i,j)
+    queue = [(i,j)]
     while len(queue) > 0:
         (i, j) = queue[0]
         queue.remove((i, j))
