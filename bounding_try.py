@@ -20,6 +20,10 @@ while True:
     print("Is the label correct? (y/n)")
     if (input()!='y'):
         errors +=1
+        print(img_idx)
+        plt.title('Label: {}'.format(train_labels.iloc[img_idx]['Category']))
+        plt.imshow(train_images[img_idx])
+        plt.show()
     print("Press s to stop, any other key to continue")
     if (input()=='s'):
         break

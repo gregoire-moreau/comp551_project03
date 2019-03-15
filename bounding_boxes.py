@@ -13,11 +13,12 @@ def biggest_box(img):
     to_ret = np.zeros((biggest[2] - biggest[0] + 1, biggest[3] - biggest[1] + 1), dtype=np.float)
     for i in range(biggest[2] - biggest[0] + 1):
         for j in range(biggest[3] - biggest[1] + 1):
-            to_ret[i][j] = 1 if img[biggest[0] + i][biggest[1] + j] == 255 else 0
+            to_ret[i][j] = 1 if img[biggest[0] + i][biggest[1] + j] >220 else 0
     h = len(to_ret)
     w = len(to_ret[0])
     if h <= 28 and w <= 28:
-        to_ret = cv2.copyMakeBorder(to_ret,floor((28-h)/2),ceil((28-h)/2),floor((28-h)/2),ceil((28-w)/2),cv2.BORDER_CONSTANT,value=0)
+        to_ret = cv2.copyMakeBorder(to_ret,floor((28-h)/2),ceil((28-h)/2),floor((28-w)/2),ceil((28-w)/2),cv2.BORDER_CONSTANT,value=0)
+        to_ret = cv2.resize(to_ret, (28, 28))
     else :
         to_ret = cv2.resize(to_ret, (28, 28))
     return to_ret
@@ -25,13 +26,13 @@ def biggest_box(img):
 
 def box_size(contours):
     (min_x, min_y, max_x, max_y) = contours
-    return (max_x-min_x)*(max_y-min_y)
+    return (max_x-min_x+1) if (max_x-min_x+1) > (max_y-min_y+1) else (max_y-min_y+1)
 
 def find_contours(img):
     tab = []
     for i in range(len(img)):
         for j in range(len(img[i])):
-            if img[i][j] == 255:
+            if img[i][j] > 220:
                 tab.append((i, j))
     results = []
     while len(tab) > 0 :
