@@ -7,7 +7,9 @@ import numpy as np
 train_images = pd.read_pickle('./input/train_images.pkl')
 train_labels = pd.read_csv('./input/train_labels.csv')
 
-
+def box_size2(contours):
+    (min_x, min_y, max_x, max_y) = contours
+    return (max_x-min_x+1) * (max_y-min_y+1)
 
 img_idx = 0
 errors = 0
@@ -18,7 +20,7 @@ plt.show()
 
 while True:
     print("Is the label correct? (y/n)")
-    if (input()!='y'):
+    if (input()=='n'):
         errors +=1
         print(img_idx)
         plt.title('Label: {}'.format(train_labels.iloc[img_idx]['Category']))
@@ -33,3 +35,5 @@ while True:
     plt.show()
 
 print(img_idx, errors, "accuracy = ", 1- (errors/(img_idx+1)))
+
+

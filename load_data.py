@@ -11,14 +11,14 @@ print(os.listdir("./input"))
 
 # Any results you write to the current directory are saved as output
 
-train_images = pd.read_pickle('./input/train_images.pkl')
-train_labels = pd.read_csv('./input/train_labels.csv')
+train_images = pd.read_pickle('./input/test_images.pkl')
+# train_labels = pd.read_csv('./input/train_labels.csv')
 
 print(train_images.shape)
-print(train_labels.shape)
-print(train_labels[0:20])
+#print(train_labels.shape)
+#print(train_labels[0:20])
 
-img_idx = 500
-plt.title('Label: {}'.format(train_labels.iloc[img_idx]['Category']))
+img_idx = 0
+# plt.title('Label: {}'.format(train_labels.iloc[img_idx]['Category']))
 plt.imshow(train_images[img_idx])
 plt.show()

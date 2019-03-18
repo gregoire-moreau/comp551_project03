@@ -19,16 +19,18 @@ from torch.utils.data import Dataset, Subset
 # https://www.kaggle.com/sdelecourt/cnn-with-pytorch-for-mnist
 # train_images = pd.read_pickle('input/train_images.pkl')
 #train_labels = pd.read_csv('input/train_labels.csv')
+# https://shaoanlu.wordpress.com/2017/05/29/sgd-all-which-one-is-the-best-optimizer-dogs-vs-cats-toy-experiment/
+# https://pytorch.org/docs/stable/optim.html
 
 params = {'dataroot':'/input/',
-          'learning_rate':0.01,
+          'learning_rate':0.2,
           'evalf' : '',
           'outf':'models',
           'ckpf':'',
           'batch_size':64,
           'test_batch_size':1000,
-          'epochs':100,
-          'momentum':0.5,
+          'epochs':10,
+          'momentum':0.25,
           'seed':42,
           'log_interval':10,
           'train':True,
@@ -41,8 +43,9 @@ class PickleDataset(Dataset):
         self.images = pd.read_pickle(pkl_file)
         if label_file != '':
             self.labels = pd.read_csv(label_file)
+            self.has_labels = True
         else:
-            self.labels = None
+            self.has_labels = False
 
         self.transform = transform
 
@@ -51,12 +54,17 @@ class PickleDataset(Dataset):
 
     def __getitem__(self, idx):
         data = transform_image(self.images[idx])
-        target = self.labels.iloc[idx]['Category']
+        if self.has_labels:
+            target = self.labels.iloc[idx]['Category']
+            if self.transform:
+                data = self.transform(data)
+                return (data, target)
+        else:
+            if self.transform:
+                data = self.transform(data)
+            return data
 
-        if self.transform:
-            data = self.transform(data)
 
-        return (data, target)
 
 def transform_image(image):
     digit = biggest_box(image)
@@ -83,7 +91,7 @@ class Net(nn.Module):
 
 
 
-def train(model, device, train_loader, optimizer, epoch):
+def train(model, device, train_loader, optimizer, epoch, file = None):
     """Training"""
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
@@ -99,8 +107,10 @@ def train(model, device, train_loader, optimizer, epoch):
                 100. * batch_idx / len(train_loader), loss.item()))
             print('{{"metric": "Train - NLL Loss", "value": {}}}'.format(
         loss.item()))
+            if file:
+              file.write(str(epoch)+','+str(100. * batch_idx / len(train_loader))+','+str(loss.item())+'\n')
 
-def test(model, device, test_loader, epoch):
+def test(model, device, test_loader, epoch, file=None):
     """Testing"""
     model.eval()
     test_loss = 0
@@ -121,44 +131,36 @@ def test(model, device, test_loader, epoch):
         test_loss, epoch))
     print('{{"metric": "Eval - Accuracy", "value": {}, "epoch": {}}}'.format(
         100. * correct / len(test_loader.dataset), epoch))
+    if file:
+      file.write(str(epoch)+","+str(100. * correct / len(test_loader.dataset))+","+str(test_loss)+"\n")
 
 
 
 def test_image():
-    """Take images from args.evalf, process to be MNIST compliant
-    and classify them with MNIST ConvNet model"""
-    def get_images_name(folder):
-        """Create a generator to list images name at evaluation time"""
-        onlyfiles = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
-        for f in onlyfiles:
-            yield f
+    dataset = PickleDataset('test_images.pkl', '', transform=transforms.Compose([
+        # transforms.ToTensor(),
+        # transforms.Normalize((0.1307,), (0.3081,))
+    ]))
 
-    def pil_loader(path):
-        """Load images from /eval/ subfolder, convert to greyscale and resized it as squared"""
-        with open(path, 'rb') as f:
-            with Image.open(f) as img:
-                sqrWidth = np.ceil(np.sqrt(img.size[0]*img.size[1])).astype(int)
-                return img.convert('L').resize((sqrWidth, sqrWidth))
-
-    eval_loader = torch.utils.data.DataLoader(ImageFolder(root=params["evalf"], transform=transforms.Compose([
-                       transforms.Resize(28),
-                       transforms.CenterCrop(28),
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ]), loader=pil_loader), batch_size=1, **kwargs)
+    eval_loader = torch.utils.data.DataLoader(dataset, batch_size=1, **kwargs)
 
     # Name generator
-    names = get_images_name(os.path.join(params["evalf"], "images"))
+    names = iter(list(range(dataset.__len__())))
     model.eval()
+    print("evaluating")
+    f = open("results2.csv", "w")
+    f.write("Id,Category\n")
     with torch.no_grad():
-        for data, target in eval_loader:
-            data, target = data.to(device), target.to(device)
+        for data in eval_loader:
+            data  = data.to(device, dtype=torch.float)
             output = model(data)
             label = output.argmax(dim=1, keepdim=True).item()
-            print ("Images: " + next(names) + ", Classified as: " + str(label))
+            f.write(str(next(names))+","+str(label)+"\n")
+    f.close()
 
 
-
+def adapt_lr(initial_lr, epoch):
+  return initial_lr * (1/epoch)
 
 if __name__ == '__main__':
     use_cuda = torch.cuda.is_available()
@@ -174,19 +176,24 @@ if __name__ == '__main__':
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
     if params["train2"]:
-        dataset = PickleDataset('input/train_images.pkl', 'input/train_labels.csv', transform=transforms.Compose([
+        dataset = PickleDataset('train_images.pkl', 'train_labels.csv', transform=transforms.Compose([
                            # transforms.ToTensor(),
                            #transforms.Normalize((0.1307,), (0.3081,))
                        ]))
         train_loader = torch.utils.data.DataLoader(
+            # dataset,
             Subset(dataset, list(range(0, int(0.8*len(dataset))))),
+            # Subset(dataset, list(range(0, 128))),
             batch_size=params["batch_size"], shuffle=True, **kwargs)
         test_loader = torch.utils.data.DataLoader(
-            Subset(dataset, list(range(int(0.8 * len(dataset)), len(dataset)))),
+            Subset(dataset, list(range(int(0.8* len(dataset)), len(dataset)))),
             batch_size=params["test_batch_size"], shuffle=True, **kwargs)
 
     model = Net().to(device)
-
+    losses = open("losses.csv", 'w')
+    losses.write("Epoch,Percentage,Loss\n")
+    accuracies = open("acc.csv", 'w')
+    accuracies.write("Epoch,Accuracy,Loss\n")
     if params["ckpf"] != '':
         if use_cuda:
             model.load_state_dict(torch.load(params["ckpf"]))
@@ -194,16 +201,21 @@ if __name__ == '__main__':
             # Load GPU model on CPU
             model.load_state_dict(torch.load(params["ckpf"], map_location=lambda storage, loc: storage))
 
-    optimizer = optim.SGD(model.parameters(), lr=params["learning_rate"], momentum=params["momentum"])
-
+    # optimizer = optim.SGD(model.parameters(), lr=params["learning_rate"], momentum=params["momentum"],nesterov=True)
     # Train?
     if params["train"]:
         # Train + Test per epoch
         for epoch in range(1, params["epochs"] + 1):
-            train(model, device, train_loader, optimizer, epoch)
-            test(model, device, test_loader, epoch)
+            optimizer = optim.SGD(model.parameters(), lr=adapt_lr(params["learning_rate"], epoch), momentum=params["momentum"],
+                                  dampening=0, nesterov = True)
+            print(optimizer)
+            train(model, device, train_loader, optimizer, epoch, file=losses)
+            test(model, device, test_loader, epoch, file=accuracies)
+            # params["learning_rate"] *= 0.8
         # Do checkpointing - Is saved in outf
         torch.save(model.state_dict(), '%s/mnist_convnet_model_epoch_%d.pth' % (params["outf"], params["epochs"]))
     # Evaluate?
+    losses.close()
+    accuracies.close()
     if params["evaluate"]:
         test_image()
